@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick-Note Application</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-[#f0f4f8] text-slate-800 min-h-screen flex flex-col font-sans">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm">
+    <div class="flex items-center space-x-2">
+      <div class="bg-amber-100 p-1.5 rounded-lg border border-amber-300 text-amber-600">
+        <i data-lucide="edit-3" class="w-5 h-5"></i>
+      </div>
+      <h1 class="text-xl font-bold text-slate-800 tracking-tight">Quick-Note</h1>
+    </div>
+    <button class="text-slate-400 hover:text-slate-600 transition">
+      <i data-lucide="log-out" class="w-5 h-5"></i>
+    </button>
+  </header>
+  <main class="max-w-6xl w-full mx-auto p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+    <div class="space-y-4">
+      <h2 id="formTitle" class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+        <span>New Note</span>
+      </h2>
+      
+      <form id="noteForm" class="space-y-4">
+        <input type="hidden" id="noteId" value="">
+        <input 
+          type="text" 
+          id="noteTitle" 
+          placeholder="Note Title..." 
+          class="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-sm transition-all"
+          required
+        >
+
+        <div class="relative">
+          <textarea 
+            id="noteContent" 
+            rows="6" 
+            placeholder="Type your note here..." 
+            class="w-full bg-white border border-slate-200 rounded-2xl p-4 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-sm resize-y"
+            required
+          ></textarea>
+        </div>
+
+        <div class="flex items-center space-x-3">
+          <button 
+            type="submit" 
+            id="submitBtn"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl text-sm flex items-center space-x-2 shadow-md transition-colors"
+          >
+            <i data-lucide="save" id="submitIcon" class="w-4 h-4"></i>
+            <span id="submitText">Save Note</span>
+          </button>
+          
+          <button 
+            type="button" 
+            id="cancelBtn"
+            class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-5 py-3 rounded-xl text-sm items-center space-x-2 transition-colors"
+            onclick="cancelEdit()"
+          >
+            <i data-lucide="x" class="w-4 h-4"></i>
+            <span>Cancel</span>
+          </button>
+        </div>
+      </form>
+    </div>
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-800">Your Saved Notes</h2>
+        <span id="noteCount" class="text-xs font-semibold text-slate-500 bg-slate-200 px-2.5 py-1 rounded-full">0 notes</span>
+      </div>
+
+      <div id="notesContainer" class="space-y-3"></div>
+    </div>
+
+  </main>
+
+  <script>
+    const noteForm = document.getElementById('noteForm');
+    const noteIdInput = document.getElementById('noteId');
+    const noteTitle = document.getElementById('noteTitle');
+    const noteContent = document.getElementById('noteContent');
+    const notesContainer = document.getElementById('notesContainer');
+    const noteCount = document.getElementById('noteCount');
+
+    const formTitle = document.getElementById('formTitle');
+    const submitBtn = document.getElementById('submitBtn');
+    const submitText = document.getElementById('submitText');
+    const submitIcon = document.getElementById('submitIcon');
+    const cancelBtn = document.getElementById('cancelBtn');
+
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    }
+
+    async function fetchNotes() {
+      try {
+        const response = await fetch('/api/notes');
+        const notes = await response.json();
+
+        notesContainer.innerHTML = '';
+        noteCount.textContent = `${notes.length} note${notes.length === 1 ? '' : 's'}`;
+
+        if (notes.length === 0) {
+          notesContainer.innerHTML = `
+            <div class="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400 text-sm">
+              No notes saved yet. Type a note on the left and click "Save Note".
+            </div>
+          `;
+          return;
+        }
+
+        notes.forEach(note => {
+          const card = document.createElement('div');
+          card.className = 'bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex justify-between items-start space-x-3 transition hover:shadow-md';
+          
+          card.innerHTML = `
+            <div class="space-y-2 w-full">
+              <span class="text-xs text-slate-400 font-medium">(${formatDate(note.created_at)})</span>
+              
+              <div>
+                <span class="inline-block bg-yellow-100 text-amber-900 border border-yellow-300 font-bold text-sm px-2.5 py-0.5 rounded-md shadow-xs">
+                  ${escapeHtml(note.title)}
+                </span>
+              </div>
+
+              <p class="text-slate-700 text-sm font-normal leading-relaxed whitespace-pre-wrap pt-1">${escapeHtml(note.content)}</p>
+            </div>
+
+            <div class="flex items-center space-x-2 text-slate-400 pt-0.5">
+              <button onclick="startEdit(${note.id}, '${escapeQuote(note.title)}', '${escapeQuote(note.content)}')" class="hover:text-slate-600 transition" title="Edit Note">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteNote(${note.id})" class="hover:text-red-500 transition" title="Delete Note">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          `;
+          notesContainer.appendChild(card);
+        });
+
+        lucide.createIcons();
+      } catch (err) {
+        console.error("Error fetching notes:", err);
+      }
+    }
+
+    function startEdit(id, title, content) {
+      formTitle.innerHTML = '<span>Edit Note ⚠️</span>';
+      noteIdInput.value = id;
+      noteTitle.value = title;
+      noteContent.value = content;
+      
+      noteTitle.classList.add('bg-amber-50', 'border-amber-300');
+      noteContent.classList.add('bg-amber-50', 'border-amber-300');
+
+      submitBtn.classList.replace('bg-blue-600', 'bg-blue-500');
+      submitBtn.classList.replace('hover:bg-blue-700', 'hover:bg-blue-600');
+      submitText.textContent = "Save Changes";
+      submitIcon.setAttribute('data-lucide', 'check');
+      cancelBtn.classList.replace('hidden', 'flex');
+
+      lucide.createIcons();
+      noteForm.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+      formTitle.innerHTML = '<span>New Note</span>';
+      noteIdInput.value = '';
+      noteTitle.value = '';
+      noteContent.value = '';
+
+      noteTitle.classList.remove('bg-amber-50', 'border-amber-300');
+      noteContent.classList.remove('bg-amber-50', 'border-amber-300');
+
+      submitBtn.classList.replace('bg-blue-500', 'bg-blue-600');
+      submitBtn.classList.replace('hover:bg-blue-600', 'hover:bg-blue-700');
+      submitText.textContent = "Save Note";
+      submitIcon.setAttribute('data-lucide', 'save');
+      cancelBtn.classList.replace('flex', 'hidden');
+
+      lucide.createIcons();
+    }
+
+    noteForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const id = noteIdInput.value;
+      const title = noteTitle.value.trim();
+      const content = noteContent.value.trim();
+
+      if (!title || !content) return;
+
+      try {
+        let response;
+        if (id) {
+          // Send PUT request to update existing note in-place
+          response = await fetch(`/api/notes/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content })
+          });
+        } else {
+          // Send POST request to create a new note
+          response = await fetch('/api/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content })
+          });
+        }
+
+        if (response.ok) {
+          cancelEdit();
+          fetchNotes();
+        }
+      } catch (err) {
+        console.error("Error saving note:", err);
+      }
+    });
+
+    async function deleteNote(id) {
+      if (noteIdInput.value == id) {
+        cancelEdit();
+      }
+      try {
+        const response = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+          fetchNotes();
+        }
+      } catch (err) {
+        console.error("Error deleting note:", err);
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function escapeQuote(str) {
+      return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+    }
+
+    fetchNotes();
+  </script>
+</body>
+</html>
